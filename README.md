@@ -2,7 +2,7 @@
 
 An automated poultry shed that feeds, waters and ventilates itself.
 
-![The build](docs/build-exterior.jpg)
+![The build](build-exterior.jpg)
 
 Three sensors watch the shed, three actuators act on it, and nothing needs a person standing
 there. Grain runs low and the hopper gate opens until the tray is full again. The drinker
@@ -30,7 +30,7 @@ then stops. None of them run on a timer.
 | **Water** | FC-28 probe in the drinker | Submersible pump via relay | Drinker reads empty | Drinker reads full |
 | **Climate** | DHT11 temperature and humidity | DC exhaust fan via relay | Temperature above the limit | Temperature back in range |
 
-![Interior](docs/build-interior.jpg)
+![Interior](build-interior.jpg)
 
 *Drinker with the level probe on the left, feed area and sensor modules on the right, exhaust
 fan at the back.*
@@ -56,7 +56,7 @@ full means the same code works regardless of flock size or appetite.
 | Submersible pump | Refills the drinker from the reservoir |
 | DC fan | Exhaust |
 
-![Wiring](docs/wiring-diagram.jpg)
+![Wiring](wiring-diagram.jpg)
 
 > **[fill]** Pin map. Read it off the diagram and put it in a table here, since that is the
 > first thing anyone rebuilding this will look for.
@@ -198,7 +198,7 @@ src/
 
 | | |
 |---|---|
-| ![Exterior](docs/build-exterior.jpg) | ![Side](docs/build-side.jpg) |
+| ![Exterior](build-exterior.jpg) | ![Side](build-side.jpg) |
 | The finished model | Reservoir, tubing, servo and fan through the acrylic wall |
 
 ---
