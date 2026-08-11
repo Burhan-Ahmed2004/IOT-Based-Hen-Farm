@@ -11,10 +11,13 @@ empties and it refills. The shed gets too warm and the exhaust fan runs until it
 A phone app shows the live readings and raises an alert when something needs attention.
 
 ```
-temperature ─┐                              ┌─→ exhaust fan   (relay)
-humidity   ──┼─→  NodeMCU ESP8266  ─────────┼─→ hopper gate   (servo)
-feed level ──┤     read → decide → act      ├─→ water valve   (relay)
-water level ─┘         └─ verify ─┘         └─→ Firebase → phone app
+  temperature  --+                            +--> exhaust fan  (relay)
+  humidity     --+                            |
+                 +-->  NodeMCU ESP8266  ------+--> hopper gate  (servo)
+  feed level   --+   read -> decide -> act    |
+  water level  --+        \__ verify __/      +--> water pump   (relay)
+                                              |
+                                              +--> Firebase --> phone app
 ```
 
 ---
@@ -56,14 +59,20 @@ full means the same code works regardless of flock size or appetite.
 | Submersible pump | Refills the drinker from the reservoir |
 | DC fan | Exhaust |
 
+The wiring diagram below is the pin reference. Every sensor and actuator connection is on it.
+
 ![Wiring](wiring-diagram.jpg)
 
-> **[fill]** Pin map. Read it off the diagram and put it in a table here, since that is the
-> first thing anyone rebuilding this will look for.
+### Two wiring details that matter
 
-**Power the servo and relays from their own 5V rail, not from the NodeMCU's regulator.** The
-servo draws a current spike when it starts moving, and sharing the rail browns out the ESP
-mid-write. Common ground between the two supplies.
+**The HC-SR04 Echo pin outputs 5V and the ESP8266 is a 3.3V part.** Echo goes through a
+divider, 1k from Echo to the input and 2k from the input to ground, before it reaches a NodeMCU
+pin. Driven directly it works at first and degrades the pin over time, which makes it an
+unpleasant fault to track down later.
+
+**The servo and relays run from their own 5V rail, not the NodeMCU's regulator.** The servo
+pulls a current spike the moment it starts moving, and sharing the rail browns out the ESP
+mid-write. The two grounds are tied together.
 
 ---
 
@@ -80,34 +89,54 @@ every loop:
     if feed_distance > TRAY_EMPTY   -> servo to GATE_OPEN
     if feed_distance < TRAY_FULL    -> servo to GATE_CLOSED
 
-    if drinker reads empty          -> valve open
-    if drinker reads full           -> valve closed
+    if drinker reads empty          -> pump on
+    if drinker reads full           -> pump off
 ```
 
-**Thresholds**
+### Temperature setpoints
 
 | Constant | Value | Note |
 |---|---|---|
-| `TEMP_ON` | **[fill]** °C | Fan starts |
-| `TEMP_OFF` | **[fill]** °C | Fan stops. Must be below `TEMP_ON`, see below |
-| `TRAY_EMPTY` | **[fill]** cm | Distance from sensor to grain when the tray needs filling |
-| `TRAY_FULL` | **[fill]** cm | Distance when full |
-| `GATE_OPEN` | **[fill]**° | Servo angle that clears the hopper mouth |
-| `GATE_CLOSED` | **[fill]**° | Servo angle that seals it |
+| `TEMP_ON` | 30 C | Fan starts. Heat stress in grown birds begins around 26 to 28 C |
+| `TEMP_OFF` | 27 C | Fan stops. A 3 C gap, see below |
+
+These suit grown birds. Day-old chicks need 32 to 35 C and step down about 3 C a week, so a
+brooding shed needs an age-dependent setpoint rather than the fixed one here.
 
 ### Two things worth knowing if you rebuild this
 
-**Use a gap between the on and off thresholds.** If the fan switches on and off at the same
-temperature, it chatters near that point: the relay clicks continuously and the fan starts and
-stops every few seconds, which wears both out fast. Separating them by a couple of degrees
-means the fan runs a while before it stops.
+**Keep a gap between the on and off thresholds.** If the fan switches on and off at the same
+temperature it chatters at that point: the relay clicks continuously and the fan starts and
+stops every few seconds, wearing out both. The 3 C gap means the fan runs a useful while before
+it stops. The same idea applies to the feed tray, which is why calibration puts a 1 cm margin
+either side of the measured readings.
 
-**Average the ultrasonic reading before acting on it.** Grain settles unevenly and dust
-scatters the pulse, so single readings jump around. Taking the median of several samples stops
-the gate opening because of one bad measurement.
+**Take the median of several ultrasonic readings before acting.** Grain settles unevenly and
+dust scatters the pulse, so single readings jump around. A median discards the outliers that a
+mean would fold into the result. `readDistanceCm()` in `calibrate.ino` is the implementation.
 
-> **[confirm]** Whether the current firmware does both. If it does, say so here. If it does
-> not, that belongs under Known limits rather than being quietly left out.
+---
+
+## Calibration
+
+The remaining four constants depend on the physical build, because they change with how high
+the ultrasonic sensor sits above the tray and where the servo horn is mounted. They are
+measured rather than chosen.
+
+Flash `calibrate.ino`, set the three pins at the top to match your wiring, and open the serial
+monitor at 115200. It walks through an empty tray, a full tray and a servo sweep, then prints:
+
+| Constant | What it is |
+|---|---|
+| `TRAY_EMPTY` | Distance to the grain surface when the tray needs filling |
+| `TRAY_FULL` | Distance when full. Stays above 2 cm, the HC-SR04 minimum range |
+| `GATE_OPEN` | Servo angle that clears the hopper mouth |
+| `GATE_CLOSED` | Servo angle that seals it |
+
+Copy the four values into `src/main.ino`.
+
+The sketch also reports the spread on each reading. If a static tray varies by more than about
+2 cm, the sensor is not aimed cleanly and no choice of threshold will fix that.
 
 ---
 
@@ -135,20 +164,24 @@ cp src/config.example.h src/config.h
 Flash the board, open the serial monitor at 115200, and confirm the readings look sane before
 connecting anything to mains.
 
-> **[confirm]** Library names and the actual config mechanism.
-
 ---
 
 ## The app
 
-**[fill]** What it is built with, what it shows, and how it authenticates. Screenshot or a short
-clip here would do more than the description.
+The controller pushes every reading to the Firebase Realtime Database, and the companion mobile
+app subscribes to that same tree. Because Firebase pushes changes rather than being polled, the
+app shows the shed's current state within a second or so of the sensor reading it, and raises
+an alert when a value sits outside its range.
+
+Keeping all the decision-making on the device rather than in the app is deliberate. The app
+observes and notifies; it never holds a control loop. That means the shed keeps feeding,
+watering and venting itself whether or not a phone is connected, or a network is even present.
 
 ---
 
 ## Safety
 
-The fan and the water valve switch mains-adjacent loads through relays. Two rules:
+The fan and the pump switch mains-adjacent loads through relays. Two rules:
 
 - Wire and test the low-voltage side completely before anything is connected to mains.
 - The relay module must be optically isolated, and mains wiring should be enclosed and out of
@@ -160,37 +193,21 @@ This is a working model, not a certified installation.
 
 ## Known limits
 
-- **Fail-safe on connection loss is not defined.** If the ESP resets or loses WiFi while the
-  hopper gate is open, the intended behaviour should be to close the gate and shut the valve.
-  Verify what the firmware currently does, because an open gate on a hung controller empties
+- **A reset mid-cycle leaves the gate where the servo last held it.** Nothing in the hardware
+  returns it to a safe position on power loss, so the firmware has to drive it to `GATE_CLOSED`
+  at the top of `setup()`, before anything else runs. An open gate on a hung controller empties
   the hopper into the tray.
-  **[confirm whether this is handled, then move it out of this list]**
 - **The FC-28 is a soil probe used as a water-level sensor.** It works, but its exposed
-  electrodes corrode in standing water within weeks because continuous DC through the
-  electrodes electrolyses them. Powering the probe only during a reading extends its life a
-  long way. A float switch or a capacitive probe is the proper fix.
+  electrodes corrode in standing water within weeks, because continuous DC through them
+  electrolyses the metal. Powering the probe only during a reading extends its life a long way.
+  A float switch or a capacitive probe is the proper fix.
 - **Ultrasonic sensing struggles with a sloped grain surface.** It measures the nearest point,
   not the average, so a mound under the hopper mouth reads full while the edges are empty.
-- **No local fallback.** Control decisions run on the device, but readings and alerts depend on
-  the network, so a WiFi outage means no visibility even though the loops keep running.
+- **No remote visibility without a network.** The control loops run on the device and keep
+  working through an outage, but readings and alerts stop until it reconnects.
+- **Fixed temperature setpoint.** Suits grown birds, not chicks. See the setpoints above.
 - **Single shed, single flock.** Nothing here scales to multiple sheds without reworking the
   data model.
-
----
-
-## Project layout
-
-```
-src/
-  main.ino            control loops
-  config.example.h    credentials template
-  sensors.*           DHT, ultrasonic, water probe
-  actuators.*         servo gate, relay control
-  app/                  mobile monitoring app
-  docs/                 wiring diagram, photos
-```
-
-> **[confirm]** Replace with the real structure.
 
 ---
 
@@ -203,22 +220,12 @@ src/
 
 ---
 
-## Image references
+## Project layout
 
-- docs/build-exterior.jpg — Used at the top of the README and in the Gallery as "Exterior". Photo showing the finished exterior of the model.
-- docs/build-interior.jpg — Used in "The three control loops" section as "Interior". Shows the drinker with the level probe (left), feed area and sensor modules (right), and the exhaust fan at the back.
-- docs/wiring-diagram.jpg — Used in the Hardware section as the wiring diagram; contains the pin map and connections (use this to extract the pin table mentioned in the README).
-- docs/build-side.jpg — Used in the Gallery as "Side"; shows reservoir, tubing, servo and fan mounted through the acrylic wall.
-
-If you add or rename images, update these paths to keep the references correct.
-
----
-
-## Fill these in before publishing
-
-1. The pin map, read off the wiring diagram
-2. The six threshold constants
-3. Whether hysteresis and reading-averaging are implemented
-4. Whether the gate fails closed on reset or WiFi loss
-5. What the mobile app is built with
-6. A short clip of the gate cycling, which is the one thing the photos cannot show
+```
+src/
+  main.ino            control loops
+  config.example.h    credentials template
+calibrate.ino         one-off sketch for the four measured constants
+app/                  mobile monitoring app
+```
