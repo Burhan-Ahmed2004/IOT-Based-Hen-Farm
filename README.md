@@ -186,8 +186,8 @@ src/
   config.example.h    credentials template
   sensors.*           DHT, ultrasonic, water probe
   actuators.*         servo gate, relay control
-app/                  mobile monitoring app
-docs/                 wiring diagram, photos
+  app/                  mobile monitoring app
+  docs/                 wiring diagram, photos
 ```
 
 > **[confirm]** Replace with the real structure.
@@ -200,6 +200,17 @@ docs/                 wiring diagram, photos
 |---|---|
 | ![Exterior](docs/build-exterior.jpg) | ![Side](docs/build-side.jpg) |
 | The finished model | Reservoir, tubing, servo and fan through the acrylic wall |
+
+---
+
+## Image references
+
+- docs/build-exterior.jpg — Used at the top of the README and in the Gallery as "Exterior". Photo showing the finished exterior of the model.
+- docs/build-interior.jpg — Used in "The three control loops" section as "Interior". Shows the drinker with the level probe (left), feed area and sensor modules (right), and the exhaust fan at the back.
+- docs/wiring-diagram.jpg — Used in the Hardware section as the wiring diagram; contains the pin map and connections (use this to extract the pin table mentioned in the README).
+- docs/build-side.jpg — Used in the Gallery as "Side"; shows reservoir, tubing, servo and fan mounted through the acrylic wall.
+
+If you add or rename images, update these paths to keep the references correct.
 
 ---
 
