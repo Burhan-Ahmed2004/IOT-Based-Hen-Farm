@@ -17,7 +17,7 @@
 #define WIFI_PASSWORD "12345678"
 
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyBy4TY5v6GtSV4KoQC-rY0Q3bHH3diDEhw"
+#define API_KEY " "  
 
 // Insert RTDB URL
 #define DATABASE_URL "https://hens-farm-default-rtdb.firebaseio.com/"
